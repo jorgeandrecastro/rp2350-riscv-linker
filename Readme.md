@@ -34,11 +34,14 @@ It has been tested with a Raspberry Pi Pico 2 in RP2350 RISC-V mode, together wi
 
 ## 📦 Installation
 
+> [!IMPORTANT]
+> The published `rp2350-riscv-linker` version `0.1` is not compatible with this setup and must not be used. Use version `0.2` instead. `riscv-rt` remains at version `0.18`.
+
 Add the crate to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rp2350-riscv-linker = "0.1"
+rp2350-riscv-linker = "0.2"
 riscv-rt = { version = "0.18", optional = true }
 ```
 
