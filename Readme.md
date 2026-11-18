@@ -58,16 +58,22 @@ fn main() -> ! {
 The RISC-V runtime must provide `link.x` and the `.vector_table` section:
 
 ```toml
-[target.riscv32imac-unknown-none-elf]
-runner = "elf2uf2-rs -d"
+[build]
+# Default target for the RP2350 RISC-V (Hazard3) core
+target = "riscv32imac-unknown-none-elf"
+
+# ==========================================
+# RISC-V (Hazard3) TARGET CONFIGURATION
+# ==========================================
+[target.'cfg(target_arch = "riscv32")']
+# Runner for flashing the RP2350 RISC-V core with the correct UF2 family
+runner = "elf2uf2-rs -d --family rp2350-riscv"
 
 rustflags = [
-    "-C", "link-arg=-Tlink.x",
-    "-C", "link-arg=--nmagic",
+  # Use the specific linker script through your linker or riscv-rt
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=--nmagic",
 ]
-
-[build]
-target = "riscv32imac-unknown-none-elf"
 ```
 
 ## 🚀 Flashing workflow

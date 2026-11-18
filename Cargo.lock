@@ -3,5 +3,5 @@
 version = 4
 
 [[package]]
-name = "rp2350-linker"
-version = "0.5.2"
+name = "rp2350-riscv-linker"
+version = "0.1.0"
