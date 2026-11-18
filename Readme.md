@@ -8,23 +8,29 @@ Zero-config linker and boot support for the RISC-V cores of the RP2350 (Raspberr
 
 You no longer need to maintain a separate `memory.x`. `rp2350-riscv-linker` generates it at compile time and injects the sections required for RP2350 boot.
 
-This crate provides the RISC-V memory environment for the RP2350 Hazard3 core. It does not replace the application's RISC-V runtime.
+This crate provides the RISC-V memory environment for the RP2350 Hazard3 core. It does not replace the application's RISC-V runtime or Embassy crates.
+
+It has been tested with a Raspberry Pi Pico 2 in RP2350 RISC-V mode, together with the `embassy-riscv` fork.
 
 ## ✨ Key features
 
 - Automatic `memory.x` injection at compile time
 - RISC-V/Hazard3 support for the RP2350
-- `.start_block` and `.boot_info` sections for boot
-- `.bi_entries` mapping compatible with `picotool`
-- Default memory: 4 MB flash and 512 KB RAM
-- Boot sections inserted after `.vector_table`
+- `.start_block` RP2350 RISC-V image definition for `picotool`
+- Default memory layout: 4 MB flash and 520 KB SRAM
+- 32-byte RP2350 RISC-V image definition at the start of flash
+- Boot entry generated for the application's `_start` reset handler
 
 ### Memory map
 
 | Region | Address | Size |
 |---|---:|---:|
-| FLASH | `0x10000000` | 4096 KB |
-| RAM | `0x20000000` | 512 KB |
+| Text / flash | `0x10000000` | 3072 KB |
+| Read-only data / flash | `0x10300000` | 1024 KB |
+| Data / SRAM | `0x20000000` | 64 KB |
+| BSS / SRAM | `0x20010000` | 320 KB |
+| Heap / SRAM | `0x20060000` | 128 KB |
+| Stack / SRAM | `0x20080000` | 8 KB |
 
 ## 📦 Installation
 
@@ -33,7 +39,7 @@ Add the crate to your `Cargo.toml`:
 ```toml
 [dependencies]
 rp2350-riscv-linker = "0.1"
-riscv-rt = "0.16"
+riscv-rt = { version = "0.18", optional = true }
 ```
 
 ## 🛠️ Usage
@@ -53,61 +59,151 @@ fn main() -> ! {
 }
 ```
 
+When using `riscv-rt`, enable it from an application feature if needed:
+
+```toml
+[features]
+default = ["riscv-target"]
+riscv-target = ["dep:riscv-rt"]
+
+[dependencies]
+riscv-rt = { version = "0.18", optional = true }
+```
+
+> [!IMPORTANT]
+> The application must provide a RISC-V runtime and startup entry point. `riscv-rt` or an Embassy fork with RISC-V support supplies `link.x`; this crate supplies `memory.x` and the RP2350 boot image definition.
+
 ## ⚙️ `.cargo/config.toml` configuration for RISC-V
 
-The RISC-V runtime must provide `link.x` and the `.vector_table` section:
+A working configuration for `riscv32imac-unknown-none-elf` is:
 
 ```toml
 [build]
-# Default target for the RP2350 RISC-V (Hazard3) core
 target = "riscv32imac-unknown-none-elf"
 
-# ==========================================
-# RISC-V (Hazard3) TARGET CONFIGURATION
-# ==========================================
-[target.'cfg(target_arch = "riscv32")']
-# Runner for flashing the RP2350 RISC-V core with the correct UF2 family
+[target.riscv32imac-unknown-none-elf]
 runner = "elf2uf2-rs -d --family rp2350-riscv"
 
 rustflags = [
-  # Use the specific linker script through your linker or riscv-rt
-  "-C", "link-arg=-Tlink.x",
   "-C", "link-arg=--nmagic",
+  "-C", "link-arg=-Tmemory.x",
+  "-C", "link-arg=-Tlink.x",
 ]
 ```
 
+Additional linker scripts can be added when the runtime or framework requires them:
+
+```toml
+rustflags = [
+  "-C", "link-arg=--nmagic",
+  "-C", "link-arg=-Tmemory.x",
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-Tembassy_rp_irq.x",
+  "-C", "link-arg=-Tdefmt.x",
+]
+```
+
+## 🧩 Embassy-RISC-V migration
+
+The RP2350 RISC-V migration can use a local `embassy-riscv` fork and this crate together. A package setup that has been tested on Pico 2 is:
+
+```toml
+[dependencies]
+defmt = "1.0.1"
+defmt-rtt = "1.0.0"
+
+embassy-embedded-hal = { path = "../embassy-riscv/embassy-embedded-hal" }
+
+embassy-executor = {
+    path = "../embassy-riscv/embassy-executor",
+    features = ["executor-thread", "defmt"]
+}
+
+embassy-time = {
+    path = "../embassy-riscv/embassy-time",
+    features = ["defmt", "defmt-timestamp-uptime"]
+}
+
+embassy-sync = { path = "../embassy-riscv/embassy-sync" }
+
+embassy-rp = {
+    path = "../embassy-riscv/embassy-rp",
+    default-features = false,
+    features = [
+        "rp235xa",
+        "riscv",
+        "time-driver",
+        "critical-section-impl",
+        "defmt",
+        "imagedef-none",
+    ]
+}
+
+riscv = "0.11.0"
+riscv-rt = { version = "0.18.0", optional = true }
+panic-halt = "0.2.0"
+
+rp2350-riscv-linker = { path = "../rp2350-riscv-linker" }
+
+[features]
+default = ["riscv-target"]
+riscv-target = [
+    "dep:riscv-rt",
+    "embassy-executor/platform-riscv32",
+]
+
+[patch.crates-io]
+embassy-time = { path = "../embassy-riscv/embassy-time" }
+embassy-time-driver = { path = "../embassy-riscv/embassy-time-driver" }
+embassy-time-queue-utils = { path = "../embassy-riscv/embassy-time-queue-utils" }
+embassy-sync = { path = "../embassy-riscv/embassy-sync" }
+embassy-futures = { path = "../embassy-riscv/embassy-futures" }
+embassy-executor = { path = "../embassy-riscv/embassy-executor" }
+embassy-executor-timer-queue = { path = "../embassy-riscv/embassy-executor-timer-queue" }
+embassy-embedded-hal = { path = "../embassy-riscv/embassy-embedded-hal" }
+embassy-rp = { path = "../embassy-riscv/embassy-rp" }
+```
+
+The local fork must provide the RISC-V versions of the Embassy crates used by the application. The exact dependency layout can differ between forks and releases.
+
 ## 🚀 Flashing workflow
 
-To automate build, UF2 conversion, and flashing, create a `flash.sh` script at the root of your project:
+To build, convert the ELF to the RP2350 RISC-V UF2 family, and flash a Pico 2:
 
 ```bash
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
 export PATH="$HOME/.cargo/bin:$PATH"
 
 TARGET="riscv32imac-unknown-none-elf"
-FAMILY="rp2350-riscv"
+BINARY_NAME="pico2-riscv"
+TARGET_PATH="target/$TARGET/release/$BINARY_NAME"
+UF2_NAME="pico2_riscv.uf2"
 
-echo "🦅 Target: RP2350 RISC-V"
+echo "🦅 RP2350 — RISC-V Hazard3"
 
-CRATE_NAME=$(cargo metadata --no-deps --format-version 1 | python3 -c 'import sys, json; print(json.load(sys.stdin)["packages"][0]["name"])')
-TARGET_PATH="target/$TARGET/release/$CRATE_NAME"
-UF2_NAME="${CRATE_NAME}.uf2"
+cargo build --release --target "$TARGET"
 
-echo "🦀 Step 1: Compiling release for $TARGET..."
-cargo build --release --target "$TARGET" || {
-    echo "❌ Compilation failed"
+if [[ ! -s "$TARGET_PATH" ]]; then
+    echo "❌ ELF not found: $TARGET_PATH"
     exit 1
-}
+fi
 
-echo "📦 Step 2: Converting ELF to UF2 ($FAMILY)..."
-picotool uf2 convert -t elf "$TARGET_PATH" "$UF2_NAME" --family "$FAMILY"
+picotool uf2 convert \
+    "$TARGET_PATH" \
+    -t elf \
+    "$UF2_NAME" \
+    --family rp2350-riscv
 
-echo "⚡ Step 3: Flashing to device..."
+if [[ ! -s "$UF2_NAME" ]]; then
+    echo "❌ UF2 generation failed"
+    exit 1
+fi
+
 sudo picotool load "$UF2_NAME" -x
 
-echo "✅ Done! ${CRATE_NAME} is flying on ${FAMILY}! 🚀"
+echo "🚀 Firmware successfully flashed!"
 ```
 
 Then make it executable and run it:

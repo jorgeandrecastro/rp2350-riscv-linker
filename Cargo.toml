@@ -1,22 +1,18 @@
+
 [package]
 name = "rp2350-riscv-linker"
 version = "0.1.0"
 edition = "2024"
 authors = ["Jorge Andre Castro <georgeandrec@gmail.com>"]
 license = "MIT OR Apache-2.0"
-description = "Zero-config linker riscv and boot support for RP2350 (Pico 2) in Rust. Pure no_std infrastructure."
+description = "RISC-V linker memory layout infrastructure for RP2350 (Pico 2)."
 repository = "https://github.com/jorgeandrecastro/rp2350-riscv-linker"
 documentation = "https://docs.rs/rp2350-riscv-linker"
 readme = "Readme.md"
 keywords = ["rp2350", "pico2", "linker", "riscv", "embedded"]
 categories = ["embedded", "no-std", "development-tools"]
 
-[profile.release]
-opt-level = "z"     
-lto = true           
-codegen-units = 1    
-panic = "abort"      
-strip = true         
+[lib]
+path = "src/lib.rs"
 
-[features]
-default = []
+[build-dependencies]
